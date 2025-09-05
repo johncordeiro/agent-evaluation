@@ -2,6 +2,60 @@
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "weni-agenteval"
+version = "0.4.1"
+description = "A generative AI-powered framework for testing virtual agents."
+authors = [{name = "Weni", email = "john.cordeiro@vtex.com"}]
+license = "Apache-2.0"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Utilities",
+    "Topic :: Software Development :: Testing",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "pyyaml~=6.0",
+    "boto3>=1.34.20,<2.0",
+    "click~=8.0",
+    "pydantic>=2.1.0,<3.0",
+    "rich>=13.7.0,<14.0",
+    "jinja2>=3.1.3,<4.0",
+    "jsonpath-ng>=1.6.1,<2.0",
+    "websocket-client>=1.6.0,<2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "flake8",
+    "black",
+    "isort",
+    "pytest",
+    "pytest-cov",
+    "pytest-mock",
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings[python]",
+    "mkdocs-click",
+    "bandit",
+    "pip-audit",
+]
+
+[project.scripts]
+weni-agenteval = "agenteval.cli:cli"
+
+[project.urls]
+Homepage = "https://github.com/weni-ai/agent-evaluation"
+Documentation = "https://github.com/weni-ai/agent-evaluation"
+Repository = "https://github.com/weni-ai/agent-evaluation"
+
 [tool.coverage.run]
 omit = [
     "tests/*",
