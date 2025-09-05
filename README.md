@@ -1,4 +1,5 @@
 ![GitHub License](https://img.shields.io/github/license/awslabs/agent-evaluation)
+[![PyPI version](https://badge.fury.io/py/weni-agenteval.svg)](https://pypi.org/project/weni-agenteval/)
 [![security: bandit](https://img.shields.io/badge/security-bandit-yellow.svg)](https://github.com/PyCQA/bandit)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Built with Material for MkDocs](https://img.shields.io/badge/Material_for_MkDocs-526CFE?style=for-the-badge&logo=MaterialForMkDocs&logoColor=white)](https://squidfunk.github.io/mkdocs-material/)
