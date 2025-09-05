@@ -12,7 +12,7 @@ from rich.logging import RichHandler
 from .hook import Hook
 
 __all__ = ["Hook"]
-__version__ = version("agent-evaluation")
+__version__ = version("weni-agenteval")
 
 
 _LOG_LEVEL_ENV = "LOG_LEVEL"
