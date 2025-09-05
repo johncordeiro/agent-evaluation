@@ -24,17 +24,20 @@ Internally, Agent Evaluation implements an LLM agent (evaluator) that will orche
 
 ### Installation
 
-1. Clone this repository:
+Install the package from PyPI:
+
+```bash
+pip install weni-agenteval
+```
+
+**Alternative: Install from source**
+
+If you want to install from source for development:
+
 ```bash
 git clone https://github.com/weni-ai/agent-evaluation.git
 cd agent-evaluation
-```
-
-2. Install the package and dependencies:
-```bash
 pip install -e .
-# or
-pip install -r requirements.txt
 ```
 
 ### Prerequisites for Weni Target
@@ -126,7 +129,24 @@ tests:
 Run the evaluation:
 
 ```bash
-agenteval run agenteval.yml
+weni-agenteval run
+```
+
+> **Note**: The tool automatically looks for `agenteval.yml` in the current directory. You can also specify a different directory with `--plan-dir` if needed.
+
+**Additional CLI options:**
+```bash
+# Run with verbose output
+weni-agenteval run --verbose
+
+# Run specific tests only
+weni-agenteval run --filter "greeting,purchase_outside_postal_code"
+
+# Run from a different directory
+weni-agenteval run --plan-dir /path/to/test/directory
+
+# Initialize a new test plan template
+weni-agenteval init
 ```
 
 ### Configuration Options for Weni Target
