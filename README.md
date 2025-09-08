@@ -53,11 +53,37 @@ To test Weni agents, you'll need:
 
 2. **A Weni Project**: An active project in the [Weni platform](https://weni.ai)
 
-3. **Weni Authentication Credentials**:
+3. **Weni Authentication**: Choose one of the following methods:
+
+   **🚀 Option 1: Weni CLI (Recommended)**
+   
+   Install and authenticate with the Weni CLI:
+   ```bash
+   # Install Weni CLI
+   pip install weni-cli
+   
+   # Authenticate with Weni
+   weni login
+   
+   # Select your project
+   weni project use [your-project-uuid]
+   ```
+   
+   Get the Weni CLI from: https://github.com/weni-ai/weni-cli
+   
+   **📋 Option 2: Environment Variables**
+   
+   Set these environment variables manually:
    - `WENI_PROJECT_UUID`: Your project's unique identifier
    - `WENI_BEARER_TOKEN`: Your authentication bearer token
+   
+   **⚙️ Option 3: Configuration File**
+   
+   Provide credentials directly in your test configuration file.
 
 ### Setting up Environment Variables
+
+> **💡 Note**: If you're using Weni CLI (Option 1 above), you only need to set AWS credentials. The Weni credentials will be handled automatically by the CLI.
 
 **macOS/Linux:**
 ```bash
@@ -66,7 +92,7 @@ export AWS_ACCESS_KEY_ID="your-aws-access-key-id"
 export AWS_SECRET_ACCESS_KEY="your-aws-secret-access-key"
 export AWS_SESSION_TOKEN="your-aws-session-token"
 
-# Weni Credentials (required for target)
+# Weni Credentials (only needed if NOT using Weni CLI)
 export WENI_PROJECT_UUID="your-project-uuid-here"
 export WENI_BEARER_TOKEN="your-bearer-token-here"
 ```
@@ -78,7 +104,7 @@ set AWS_ACCESS_KEY_ID=your-aws-access-key-id
 set AWS_SECRET_ACCESS_KEY=your-aws-secret-access-key
 set AWS_SESSION_TOKEN=your-aws-session-token
 
-REM Weni Credentials (required for target)
+REM Weni Credentials (only needed if NOT using Weni CLI)
 set WENI_PROJECT_UUID=your-project-uuid-here
 set WENI_BEARER_TOKEN=your-bearer-token-here
 ```
@@ -90,7 +116,7 @@ $env:AWS_ACCESS_KEY_ID="your-aws-access-key-id"
 $env:AWS_SECRET_ACCESS_KEY="your-aws-secret-access-key"
 $env:AWS_SESSION_TOKEN="your-aws-session-token"
 
-# Weni Credentials (required for target)
+# Weni Credentials (only needed if NOT using Weni CLI)
 $env:WENI_PROJECT_UUID="your-project-uuid-here"
 $env:WENI_BEARER_TOKEN="your-bearer-token-here"
 ```
@@ -155,8 +181,8 @@ weni-agenteval init
 |-----------|------|----------|---------|-------------|
 | `type` | string | Yes | - | Must be `"weni"` |
 | `timeout` | integer | No | `30` | Max seconds to wait for response |
-| `weni_project_uuid` | string | No | - | Project UUID (use env var instead) |
-| `weni_bearer_token` | string | No | - | Bearer token (use env var instead) |
+| `weni_project_uuid` | string | No | - | Project UUID (use Weni CLI or env var instead) |
+| `weni_bearer_token` | string | No | - | Bearer token (use Weni CLI or env var instead) |
 
 ### Advanced Example
 
@@ -231,9 +257,11 @@ To contribute, please refer to [CONTRIBUTING.md](./CONTRIBUTING.md)
 - Verify the `aws_region` in your configuration matches your AWS account's region access
 
 **Weni Authentication Errors**
-- Verify your `WENI_BEARER_TOKEN` is valid and not expired
+- **Using Weni CLI (Recommended)**: Run `weni login` to re-authenticate, then `weni project use [project-uuid]` to select your project
+- **Using Environment Variables**: Verify your `WENI_BEARER_TOKEN` is valid and not expired
 - Check that the `WENI_PROJECT_UUID` matches your actual project
 - Ensure the bearer token has the necessary permissions for the project
+- Get Weni CLI at: https://github.com/weni-ai/weni-cli
 
 **Connection Issues**
 - Verify the Weni API endpoints are accessible from your network

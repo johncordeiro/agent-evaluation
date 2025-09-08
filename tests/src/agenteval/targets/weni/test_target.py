@@ -6,6 +6,7 @@ import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from src.agenteval.targets.weni import target
 
@@ -75,7 +76,7 @@ class TestWeniTarget:
         mock_store.get_token.return_value = None
         mock_store_class.return_value = mock_store
         
-        with pytest.raises(ValueError, match="weni_project_uuid.*weni-cli cache"):
+        with pytest.raises(ValueError, match="weni_project_uuid is required"):
             target.WeniTarget(
                 weni_bearer_token="test-token"
             )
@@ -93,7 +94,7 @@ class TestWeniTarget:
         mock_store.get_token.return_value = None
         mock_store_class.return_value = mock_store
         
-        with pytest.raises(ValueError, match="weni_bearer_token.*weni-cli cache"):
+        with pytest.raises(ValueError, match="weni_bearer_token is required"):
             target.WeniTarget(
                 weni_project_uuid="test-uuid"
             )
@@ -241,7 +242,7 @@ class TestWeniTarget:
         mock_store_class.return_value = mock_store
         
         # Should raise ValueError for missing project UUID
-        with pytest.raises(ValueError, match="weni_project_uuid.*weni-cli cache"):
+        with pytest.raises(ValueError, match="weni_project_uuid is required"):
             target.WeniTarget()
     
     @patch('src.agenteval.targets.weni.target.Store')
@@ -300,3 +301,121 @@ class TestWeniTarget:
         # Verify only get_token was called since project_uuid was available from env var
         # Due to Python's 'or' short-circuit evaluation, get_project_uuid won't be called
         mock_store.get_token.assert_called_once()
+    
+    @patch('src.agenteval.targets.weni.target.requests.post')
+    def test_http_error_401_unauthorized(self, mock_post, weni_target_fixture):
+        """Test 401 Unauthorized error handling."""
+        # Mock a 401 response
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_response.reason = "Unauthorized"
+        mock_response.url = "https://nexus.weni.ai/api/test/preview/"
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("401 Client Error")
+        mock_post.return_value = mock_response
+        
+        with pytest.raises(ValueError, match="Authentication failed.*401 Unauthorized"):
+            weni_target_fixture._send_prompt("Test prompt")
+    
+    @patch('src.agenteval.targets.weni.target.requests.post')
+    def test_http_error_403_forbidden(self, mock_post, weni_target_fixture):
+        """Test 403 Forbidden error handling."""
+        # Mock a 403 response
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+        mock_response.reason = "Forbidden"
+        mock_response.url = "https://nexus.weni.ai/api/test/preview/"
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("403 Client Error")
+        mock_post.return_value = mock_response
+        
+        with pytest.raises(ValueError, match="Access forbidden.*403 Forbidden"):
+            weni_target_fixture._send_prompt("Test prompt")
+    
+    @patch('src.agenteval.targets.weni.target.requests.post')
+    def test_http_error_404_not_found(self, mock_post, weni_target_fixture):
+        """Test 404 Not Found error handling."""
+        # Mock a 404 response
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.reason = "Not Found"
+        mock_response.url = "https://nexus.weni.ai/api/test/preview/"
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("404 Client Error")
+        mock_post.return_value = mock_response
+        
+        with pytest.raises(ValueError, match="Project not found.*404 Not Found"):
+            weni_target_fixture._send_prompt("Test prompt")
+    
+    @patch('src.agenteval.targets.weni.target.requests.post')
+    def test_http_error_500_server_error(self, mock_post, weni_target_fixture):
+        """Test 500 Server Error handling."""
+        # Mock a 500 response
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.reason = "Internal Server Error"
+        mock_response.url = "https://nexus.weni.ai/api/test/preview/"
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("500 Server Error")
+        mock_post.return_value = mock_response
+        
+        with pytest.raises(ValueError, match="Weni server error.*500"):
+            weni_target_fixture._send_prompt("Test prompt")
+    
+    @patch('src.agenteval.targets.weni.target.requests.post')
+    def test_http_error_other_status(self, mock_post, weni_target_fixture):
+        """Test other HTTP error handling."""
+        # Mock a 418 response (I'm a teapot - uncommon status code)
+        mock_response = MagicMock()
+        mock_response.status_code = 418
+        mock_response.reason = "I'm a teapot"
+        mock_response.url = "https://nexus.weni.ai/api/test/preview/"
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("418 Client Error")
+        mock_post.return_value = mock_response
+        
+        with pytest.raises(ValueError, match="HTTP error 418.*I'm a teapot"):
+            weni_target_fixture._send_prompt("Test prompt")
+    
+    def test_error_messages_contain_helpful_instructions(self, weni_target_fixture):
+        """Test that error messages contain helpful instructions for users."""
+        # Mock a 401 response to test the error message content
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_response.reason = "Unauthorized"
+        mock_response.url = "https://nexus.weni.ai/api/test/preview/"
+        
+        try:
+            weni_target_fixture._handle_http_error(
+                mock_response, 
+                requests.exceptions.HTTPError("401 Client Error")
+            )
+        except ValueError as e:
+            error_message = str(e)
+            # Check that the error message contains helpful instructions
+            assert "weni login" in error_message
+            assert "weni-cli" in error_message
+            assert "https://github.com/weni-ai/weni-cli" in error_message
+            assert "WENI_BEARER_TOKEN" in error_message
+            assert "weni_bearer_token" in error_message
+        else:
+            pytest.fail("Expected ValueError to be raised")
+    
+    def test_404_error_includes_project_uuid(self, weni_target_fixture):
+        """Test that 404 error includes the project UUID in the message."""
+        # Mock a 404 response
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.reason = "Not Found"
+        mock_response.url = "https://nexus.weni.ai/api/test/preview/"
+        
+        try:
+            weni_target_fixture._handle_http_error(
+                mock_response,
+                requests.exceptions.HTTPError("404 Client Error")
+            )
+        except ValueError as e:
+            error_message = str(e)
+            # Check that the error message includes the project UUID and weni-cli info
+            assert weni_target_fixture.project_uuid in error_message
+            assert "weni project use" in error_message
+            assert "https://github.com/weni-ai/weni-cli" in error_message
+            assert "WENI_PROJECT_UUID" in error_message
+            assert "weni_project_uuid" in error_message
+        else:
+            pytest.fail("Expected ValueError to be raised")
