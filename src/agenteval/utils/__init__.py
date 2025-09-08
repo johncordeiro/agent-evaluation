@@ -3,5 +3,6 @@
 
 from .aws import create_boto3_client
 from .imports import import_class
+from .store import Store
 
-__all__ = ["import_class", "create_boto3_client"]
+__all__ = ["import_class", "create_boto3_client", "Store"]

@@ -13,6 +13,7 @@ import requests
 import websocket
 
 from agenteval.targets import BaseTarget, TargetResponse
+from agenteval.utils import Store
 
 logger = logging.getLogger(__name__)
 
@@ -32,26 +33,42 @@ class WeniTarget(BaseTarget):
 
         Args:
             weni_project_uuid (Optional[str]): The Weni project UUID. 
-                If not provided, will be read from WENI_PROJECT_UUID env var.
+                If not provided, will be read from WENI_PROJECT_UUID env var or weni-cli cache.
             weni_bearer_token (Optional[str]): The Weni bearer token. 
-                If not provided, will be read from WENI_BEARER_TOKEN env var.
+                If not provided, will be read from WENI_BEARER_TOKEN env var or weni-cli cache.
             language (str): The language for the conversation. Defaults to "pt-BR".
             timeout (int): Maximum time to wait for agent response in seconds. Defaults to 30.
         """
         super().__init__()
         
-        self.project_uuid = weni_project_uuid or os.environ.get("WENI_PROJECT_UUID")
-        self.bearer_token = weni_bearer_token or os.environ.get("WENI_BEARER_TOKEN")
+        # Try multiple sources for project_uuid and bearer_token:
+        # 1. Direct parameter
+        # 2. Environment variable
+        # 3. Weni CLI cache (fallback)
+        store = Store()
+        
+        self.project_uuid = (
+            weni_project_uuid or 
+            os.environ.get("WENI_PROJECT_UUID") or 
+            store.get_project_uuid()
+        )
+        self.bearer_token = (
+            weni_bearer_token or 
+            os.environ.get("WENI_BEARER_TOKEN") or 
+            store.get_token()
+        )
         self.language = language
         self.timeout = timeout
         
         if not self.project_uuid:
             raise ValueError(
-                "weni_project_uuid must be provided or WENI_PROJECT_UUID must be set as environment variable"
+                "weni_project_uuid must be provided, set as WENI_PROJECT_UUID environment variable, "
+                "or available in weni-cli cache (~/.weni_cli)"
             )
         if not self.bearer_token:
             raise ValueError(
-                "weni_bearer_token must be provided or WENI_BEARER_TOKEN must be set as environment variable"
+                "weni_bearer_token must be provided, set as WENI_BEARER_TOKEN environment variable, "
+                "or available in weni-cli cache (~/.weni_cli)"
             )
         
         # Generate unique contact URN for this test session

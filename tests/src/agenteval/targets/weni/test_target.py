@@ -62,16 +62,38 @@ class TestWeniTarget:
         assert weni_target_with_params.language == "en-US"
         assert weni_target_with_params.timeout == 5
     
-    def test_initialization_missing_project_uuid(self):
+    @patch('src.agenteval.targets.weni.target.Store')
+    def test_initialization_missing_project_uuid(self, mock_store_class, monkeypatch):
         """Test that missing project UUID raises ValueError."""
-        with pytest.raises(ValueError, match="weni_project_uuid.*WENI_PROJECT_UUID"):
+        # Clear environment variables
+        monkeypatch.delenv("WENI_PROJECT_UUID", raising=False)
+        monkeypatch.delenv("WENI_BEARER_TOKEN", raising=False)
+        
+        # Mock store to return None for both values
+        mock_store = MagicMock()
+        mock_store.get_project_uuid.return_value = None
+        mock_store.get_token.return_value = None
+        mock_store_class.return_value = mock_store
+        
+        with pytest.raises(ValueError, match="weni_project_uuid.*weni-cli cache"):
             target.WeniTarget(
                 weni_bearer_token="test-token"
             )
     
-    def test_initialization_missing_bearer_token(self):
+    @patch('src.agenteval.targets.weni.target.Store')
+    def test_initialization_missing_bearer_token(self, mock_store_class, monkeypatch):
         """Test that missing bearer token raises ValueError."""
-        with pytest.raises(ValueError, match="weni_bearer_token.*WENI_BEARER_TOKEN"):
+        # Clear environment variables
+        monkeypatch.delenv("WENI_PROJECT_UUID", raising=False)
+        monkeypatch.delenv("WENI_BEARER_TOKEN", raising=False)
+        
+        # Mock store to return None for both values
+        mock_store = MagicMock()
+        mock_store.get_project_uuid.return_value = None
+        mock_store.get_token.return_value = None
+        mock_store_class.return_value = mock_store
+        
+        with pytest.raises(ValueError, match="weni_bearer_token.*weni-cli cache"):
             target.WeniTarget(
                 weni_project_uuid="test-uuid"
             )
@@ -92,21 +114,14 @@ class TestWeniTarget:
             # Get the on_message callback
             on_message = mock_websocket.call_args[1]['on_message']
             
-            # Simulate receiving a message with finalResponse
+            # Simulate receiving a message with preview format (matching actual implementation)
             test_message = {
-                "type": "trace_update",
-                "trace": {
-                    "trace": {
-                        "trace": {
-                            "orchestrationTrace": {
-                                "observation": {
-                                    "type": "FINISH",
-                                    "finalResponse": {
-                                        "text": "Test response from Weni agent"
-                                    }
-                                }
-                            }
-                        }
+                "type": "preview",
+                "message": {
+                    "type": "preview",
+                    "content": {
+                        "type": "broadcast",
+                        "message": "Test response from Weni agent"
                     }
                 }
             }
@@ -183,3 +198,105 @@ class TestWeniTarget:
         # Invoke should raise RuntimeError
         with pytest.raises(RuntimeError, match="WebSocket error occurred"):
             weni_target_fixture.invoke("Test prompt")
+    
+    @patch('src.agenteval.targets.weni.target.Store')
+    def test_initialization_with_store_fallback(self, mock_store_class, monkeypatch):
+        """Test that WeniTarget falls back to store when env vars are not set."""
+        # Clear environment variables
+        monkeypatch.delenv("WENI_PROJECT_UUID", raising=False)
+        monkeypatch.delenv("WENI_BEARER_TOKEN", raising=False)
+        
+        # Mock the store instance and its methods
+        mock_store = MagicMock()
+        mock_store.get_project_uuid.return_value = "store-project-uuid"
+        mock_store.get_token.return_value = "store-bearer-token"
+        mock_store_class.return_value = mock_store
+        
+        # Create target without explicit parameters
+        weni_target = target.WeniTarget(
+            language="en-US",
+            timeout=10
+        )
+        
+        # Verify store was used
+        mock_store_class.assert_called_once()
+        mock_store.get_project_uuid.assert_called_once()
+        mock_store.get_token.assert_called_once()
+        
+        # Verify values from store were used
+        assert weni_target.project_uuid == "store-project-uuid"
+        assert weni_target.bearer_token == "store-bearer-token"
+    
+    @patch('src.agenteval.targets.weni.target.Store')
+    def test_initialization_store_fallback_missing_values(self, mock_store_class, monkeypatch):
+        """Test that missing values in store still raise ValueError."""
+        # Clear environment variables
+        monkeypatch.delenv("WENI_PROJECT_UUID", raising=False)
+        monkeypatch.delenv("WENI_BEARER_TOKEN", raising=False)
+        
+        # Mock the store instance to return None for both values
+        mock_store = MagicMock()
+        mock_store.get_project_uuid.return_value = None
+        mock_store.get_token.return_value = None
+        mock_store_class.return_value = mock_store
+        
+        # Should raise ValueError for missing project UUID
+        with pytest.raises(ValueError, match="weni_project_uuid.*weni-cli cache"):
+            target.WeniTarget()
+    
+    @patch('src.agenteval.targets.weni.target.Store')
+    def test_initialization_priority_order(self, mock_store_class, monkeypatch):
+        """Test that parameter > env var > store priority is respected."""
+        # Set environment variable
+        monkeypatch.setenv("WENI_PROJECT_UUID", "env-project-uuid")
+        monkeypatch.setenv("WENI_BEARER_TOKEN", "env-bearer-token")
+        
+        # Mock the store instance
+        mock_store = MagicMock()
+        mock_store.get_project_uuid.return_value = "store-project-uuid"
+        mock_store.get_token.return_value = "store-bearer-token"
+        mock_store_class.return_value = mock_store
+        
+        # Create target with explicit parameter (should take highest priority)
+        weni_target = target.WeniTarget(
+            weni_project_uuid="param-project-uuid",
+            weni_bearer_token="param-bearer-token"
+        )
+        
+        # Verify parameters took priority
+        assert weni_target.project_uuid == "param-project-uuid"
+        assert weni_target.bearer_token == "param-bearer-token"
+        
+        # Store should still be instantiated but methods not called since params provided
+        mock_store_class.assert_called_once()
+        
+        # Now test env var priority over store
+        weni_target_env = target.WeniTarget()
+        
+        # Should use env vars, not store values
+        assert weni_target_env.project_uuid == "env-project-uuid"
+        assert weni_target_env.bearer_token == "env-bearer-token"
+    
+    @patch('src.agenteval.targets.weni.target.Store')
+    def test_initialization_partial_store_fallback(self, mock_store_class, monkeypatch):
+        """Test partial fallback where only one value comes from store."""
+        # Set only project UUID in env var
+        monkeypatch.setenv("WENI_PROJECT_UUID", "env-project-uuid")
+        monkeypatch.delenv("WENI_BEARER_TOKEN", raising=False)
+        
+        # Mock the store instance
+        mock_store = MagicMock()
+        mock_store.get_project_uuid.return_value = "store-project-uuid"
+        mock_store.get_token.return_value = "store-bearer-token"
+        mock_store_class.return_value = mock_store
+        
+        # Create target
+        weni_target = target.WeniTarget()
+        
+        # Should use env var for project UUID and store for token
+        assert weni_target.project_uuid == "env-project-uuid"
+        assert weni_target.bearer_token == "store-bearer-token"
+        
+        # Verify only get_token was called since project_uuid was available from env var
+        # Due to Python's 'or' short-circuit evaluation, get_project_uuid won't be called
+        mock_store.get_token.assert_called_once()
