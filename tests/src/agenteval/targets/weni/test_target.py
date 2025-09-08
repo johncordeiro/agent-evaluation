@@ -6,6 +6,7 @@ import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from src.agenteval.targets.weni import target
 
@@ -62,16 +63,38 @@ class TestWeniTarget:
         assert weni_target_with_params.language == "en-US"
         assert weni_target_with_params.timeout == 5
     
-    def test_initialization_missing_project_uuid(self):
+    @patch('src.agenteval.targets.weni.target.Store')
+    def test_initialization_missing_project_uuid(self, mock_store_class, monkeypatch):
         """Test that missing project UUID raises ValueError."""
-        with pytest.raises(ValueError, match="weni_project_uuid.*WENI_PROJECT_UUID"):
+        # Clear environment variables
+        monkeypatch.delenv("WENI_PROJECT_UUID", raising=False)
+        monkeypatch.delenv("WENI_BEARER_TOKEN", raising=False)
+        
+        # Mock store to return None for both values
+        mock_store = MagicMock()
+        mock_store.get_project_uuid.return_value = None
+        mock_store.get_token.return_value = None
+        mock_store_class.return_value = mock_store
+        
+        with pytest.raises(ValueError, match="weni_project_uuid is required"):
             target.WeniTarget(
                 weni_bearer_token="test-token"
             )
     
-    def test_initialization_missing_bearer_token(self):
+    @patch('src.agenteval.targets.weni.target.Store')
+    def test_initialization_missing_bearer_token(self, mock_store_class, monkeypatch):
         """Test that missing bearer token raises ValueError."""
-        with pytest.raises(ValueError, match="weni_bearer_token.*WENI_BEARER_TOKEN"):
+        # Clear environment variables
+        monkeypatch.delenv("WENI_PROJECT_UUID", raising=False)
+        monkeypatch.delenv("WENI_BEARER_TOKEN", raising=False)
+        
+        # Mock store to return None for both values
+        mock_store = MagicMock()
+        mock_store.get_project_uuid.return_value = None
+        mock_store.get_token.return_value = None
+        mock_store_class.return_value = mock_store
+        
+        with pytest.raises(ValueError, match="weni_bearer_token is required"):
             target.WeniTarget(
                 weni_project_uuid="test-uuid"
             )
@@ -92,21 +115,14 @@ class TestWeniTarget:
             # Get the on_message callback
             on_message = mock_websocket.call_args[1]['on_message']
             
-            # Simulate receiving a message with finalResponse
+            # Simulate receiving a message with preview format (matching actual implementation)
             test_message = {
-                "type": "trace_update",
-                "trace": {
-                    "trace": {
-                        "trace": {
-                            "orchestrationTrace": {
-                                "observation": {
-                                    "type": "FINISH",
-                                    "finalResponse": {
-                                        "text": "Test response from Weni agent"
-                                    }
-                                }
-                            }
-                        }
+                "type": "preview",
+                "message": {
+                    "type": "preview",
+                    "content": {
+                        "type": "broadcast",
+                        "message": "Test response from Weni agent"
                     }
                 }
             }
@@ -183,3 +199,223 @@ class TestWeniTarget:
         # Invoke should raise RuntimeError
         with pytest.raises(RuntimeError, match="WebSocket error occurred"):
             weni_target_fixture.invoke("Test prompt")
+    
+    @patch('src.agenteval.targets.weni.target.Store')
+    def test_initialization_with_store_fallback(self, mock_store_class, monkeypatch):
+        """Test that WeniTarget falls back to store when env vars are not set."""
+        # Clear environment variables
+        monkeypatch.delenv("WENI_PROJECT_UUID", raising=False)
+        monkeypatch.delenv("WENI_BEARER_TOKEN", raising=False)
+        
+        # Mock the store instance and its methods
+        mock_store = MagicMock()
+        mock_store.get_project_uuid.return_value = "store-project-uuid"
+        mock_store.get_token.return_value = "store-bearer-token"
+        mock_store_class.return_value = mock_store
+        
+        # Create target without explicit parameters
+        weni_target = target.WeniTarget(
+            language="en-US",
+            timeout=10
+        )
+        
+        # Verify store was used
+        mock_store_class.assert_called_once()
+        mock_store.get_project_uuid.assert_called_once()
+        mock_store.get_token.assert_called_once()
+        
+        # Verify values from store were used
+        assert weni_target.project_uuid == "store-project-uuid"
+        assert weni_target.bearer_token == "store-bearer-token"
+    
+    @patch('src.agenteval.targets.weni.target.Store')
+    def test_initialization_store_fallback_missing_values(self, mock_store_class, monkeypatch):
+        """Test that missing values in store still raise ValueError."""
+        # Clear environment variables
+        monkeypatch.delenv("WENI_PROJECT_UUID", raising=False)
+        monkeypatch.delenv("WENI_BEARER_TOKEN", raising=False)
+        
+        # Mock the store instance to return None for both values
+        mock_store = MagicMock()
+        mock_store.get_project_uuid.return_value = None
+        mock_store.get_token.return_value = None
+        mock_store_class.return_value = mock_store
+        
+        # Should raise ValueError for missing project UUID
+        with pytest.raises(ValueError, match="weni_project_uuid is required"):
+            target.WeniTarget()
+    
+    @patch('src.agenteval.targets.weni.target.Store')
+    def test_initialization_priority_order(self, mock_store_class, monkeypatch):
+        """Test that parameter > env var > store priority is respected."""
+        # Set environment variable
+        monkeypatch.setenv("WENI_PROJECT_UUID", "env-project-uuid")
+        monkeypatch.setenv("WENI_BEARER_TOKEN", "env-bearer-token")
+        
+        # Mock the store instance
+        mock_store = MagicMock()
+        mock_store.get_project_uuid.return_value = "store-project-uuid"
+        mock_store.get_token.return_value = "store-bearer-token"
+        mock_store_class.return_value = mock_store
+        
+        # Create target with explicit parameter (should take highest priority)
+        weni_target = target.WeniTarget(
+            weni_project_uuid="param-project-uuid",
+            weni_bearer_token="param-bearer-token"
+        )
+        
+        # Verify parameters took priority
+        assert weni_target.project_uuid == "param-project-uuid"
+        assert weni_target.bearer_token == "param-bearer-token"
+        
+        # Store should still be instantiated but methods not called since params provided
+        mock_store_class.assert_called_once()
+        
+        # Now test env var priority over store
+        weni_target_env = target.WeniTarget()
+        
+        # Should use env vars, not store values
+        assert weni_target_env.project_uuid == "env-project-uuid"
+        assert weni_target_env.bearer_token == "env-bearer-token"
+    
+    @patch('src.agenteval.targets.weni.target.Store')
+    def test_initialization_partial_store_fallback(self, mock_store_class, monkeypatch):
+        """Test partial fallback where only one value comes from store."""
+        # Set only project UUID in env var
+        monkeypatch.setenv("WENI_PROJECT_UUID", "env-project-uuid")
+        monkeypatch.delenv("WENI_BEARER_TOKEN", raising=False)
+        
+        # Mock the store instance
+        mock_store = MagicMock()
+        mock_store.get_project_uuid.return_value = "store-project-uuid"
+        mock_store.get_token.return_value = "store-bearer-token"
+        mock_store_class.return_value = mock_store
+        
+        # Create target
+        weni_target = target.WeniTarget()
+        
+        # Should use env var for project UUID and store for token
+        assert weni_target.project_uuid == "env-project-uuid"
+        assert weni_target.bearer_token == "store-bearer-token"
+        
+        # Verify only get_token was called since project_uuid was available from env var
+        # Due to Python's 'or' short-circuit evaluation, get_project_uuid won't be called
+        mock_store.get_token.assert_called_once()
+    
+    @patch('src.agenteval.targets.weni.target.requests.post')
+    def test_http_error_401_unauthorized(self, mock_post, weni_target_fixture):
+        """Test 401 Unauthorized error handling."""
+        # Mock a 401 response
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_response.reason = "Unauthorized"
+        mock_response.url = "https://nexus.weni.ai/api/test/preview/"
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("401 Client Error")
+        mock_post.return_value = mock_response
+        
+        with pytest.raises(ValueError, match="Authentication failed.*401 Unauthorized"):
+            weni_target_fixture._send_prompt("Test prompt")
+    
+    @patch('src.agenteval.targets.weni.target.requests.post')
+    def test_http_error_403_forbidden(self, mock_post, weni_target_fixture):
+        """Test 403 Forbidden error handling."""
+        # Mock a 403 response
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+        mock_response.reason = "Forbidden"
+        mock_response.url = "https://nexus.weni.ai/api/test/preview/"
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("403 Client Error")
+        mock_post.return_value = mock_response
+        
+        with pytest.raises(ValueError, match="Access forbidden.*403 Forbidden"):
+            weni_target_fixture._send_prompt("Test prompt")
+    
+    @patch('src.agenteval.targets.weni.target.requests.post')
+    def test_http_error_404_not_found(self, mock_post, weni_target_fixture):
+        """Test 404 Not Found error handling."""
+        # Mock a 404 response
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.reason = "Not Found"
+        mock_response.url = "https://nexus.weni.ai/api/test/preview/"
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("404 Client Error")
+        mock_post.return_value = mock_response
+        
+        with pytest.raises(ValueError, match="Project not found.*404 Not Found"):
+            weni_target_fixture._send_prompt("Test prompt")
+    
+    @patch('src.agenteval.targets.weni.target.requests.post')
+    def test_http_error_500_server_error(self, mock_post, weni_target_fixture):
+        """Test 500 Server Error handling."""
+        # Mock a 500 response
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.reason = "Internal Server Error"
+        mock_response.url = "https://nexus.weni.ai/api/test/preview/"
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("500 Server Error")
+        mock_post.return_value = mock_response
+        
+        with pytest.raises(ValueError, match="Weni server error.*500"):
+            weni_target_fixture._send_prompt("Test prompt")
+    
+    @patch('src.agenteval.targets.weni.target.requests.post')
+    def test_http_error_other_status(self, mock_post, weni_target_fixture):
+        """Test other HTTP error handling."""
+        # Mock a 418 response (I'm a teapot - uncommon status code)
+        mock_response = MagicMock()
+        mock_response.status_code = 418
+        mock_response.reason = "I'm a teapot"
+        mock_response.url = "https://nexus.weni.ai/api/test/preview/"
+        mock_response.raise_for_status.side_effect = requests.exceptions.HTTPError("418 Client Error")
+        mock_post.return_value = mock_response
+        
+        with pytest.raises(ValueError, match="HTTP error 418.*I'm a teapot"):
+            weni_target_fixture._send_prompt("Test prompt")
+    
+    def test_error_messages_contain_helpful_instructions(self, weni_target_fixture):
+        """Test that error messages contain helpful instructions for users."""
+        # Mock a 401 response to test the error message content
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_response.reason = "Unauthorized"
+        mock_response.url = "https://nexus.weni.ai/api/test/preview/"
+        
+        try:
+            weni_target_fixture._handle_http_error(
+                mock_response, 
+                requests.exceptions.HTTPError("401 Client Error")
+            )
+        except ValueError as e:
+            error_message = str(e)
+            # Check that the error message contains helpful instructions
+            assert "weni login" in error_message
+            assert "weni-cli" in error_message
+            assert "https://github.com/weni-ai/weni-cli" in error_message
+            assert "WENI_BEARER_TOKEN" in error_message
+            assert "weni_bearer_token" in error_message
+        else:
+            pytest.fail("Expected ValueError to be raised")
+    
+    def test_404_error_includes_project_uuid(self, weni_target_fixture):
+        """Test that 404 error includes the project UUID in the message."""
+        # Mock a 404 response
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        mock_response.reason = "Not Found"
+        mock_response.url = "https://nexus.weni.ai/api/test/preview/"
+        
+        try:
+            weni_target_fixture._handle_http_error(
+                mock_response,
+                requests.exceptions.HTTPError("404 Client Error")
+            )
+        except ValueError as e:
+            error_message = str(e)
+            # Check that the error message includes the project UUID and weni-cli info
+            assert weni_target_fixture.project_uuid in error_message
+            assert "weni project use" in error_message
+            assert "https://github.com/weni-ai/weni-cli" in error_message
+            assert "WENI_PROJECT_UUID" in error_message
+            assert "weni_project_uuid" in error_message
+        else:
+            pytest.fail("Expected ValueError to be raised")

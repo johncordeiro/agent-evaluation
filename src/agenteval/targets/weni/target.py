@@ -13,6 +13,7 @@ import requests
 import websocket
 
 from agenteval.targets import BaseTarget, TargetResponse
+from agenteval.utils import Store
 
 logger = logging.getLogger(__name__)
 
@@ -32,26 +33,48 @@ class WeniTarget(BaseTarget):
 
         Args:
             weni_project_uuid (Optional[str]): The Weni project UUID. 
-                If not provided, will be read from WENI_PROJECT_UUID env var.
+                If not provided, will be read from WENI_PROJECT_UUID env var or weni-cli cache.
             weni_bearer_token (Optional[str]): The Weni bearer token. 
-                If not provided, will be read from WENI_BEARER_TOKEN env var.
+                If not provided, will be read from WENI_BEARER_TOKEN env var or weni-cli cache.
             language (str): The language for the conversation. Defaults to "pt-BR".
             timeout (int): Maximum time to wait for agent response in seconds. Defaults to 30.
         """
         super().__init__()
         
-        self.project_uuid = weni_project_uuid or os.environ.get("WENI_PROJECT_UUID")
-        self.bearer_token = weni_bearer_token or os.environ.get("WENI_BEARER_TOKEN")
+        # Try multiple sources for project_uuid and bearer_token:
+        # 1. Direct parameter
+        # 2. Environment variable
+        # 3. Weni CLI cache (fallback)
+        store = Store()
+        
+        self.project_uuid = (
+            weni_project_uuid or 
+            os.environ.get("WENI_PROJECT_UUID") or 
+            store.get_project_uuid()
+        )
+        self.bearer_token = (
+            weni_bearer_token or 
+            os.environ.get("WENI_BEARER_TOKEN") or 
+            store.get_token()
+        )
         self.language = language
         self.timeout = timeout
         
         if not self.project_uuid:
             raise ValueError(
-                "weni_project_uuid must be provided or WENI_PROJECT_UUID must be set as environment variable"
+                "weni_project_uuid is required. Please:\n"
+                "1. Install and use Weni CLI (recommended): 'pip install weni-cli && weni login && weni project use [project-uuid]'\n"
+                "   Get Weni CLI at: https://github.com/weni-ai/weni-cli\n"
+                "2. Or set WENI_PROJECT_UUID environment variable\n"
+                "3. Or provide 'weni_project_uuid' in your test configuration"
             )
         if not self.bearer_token:
             raise ValueError(
-                "weni_bearer_token must be provided or WENI_BEARER_TOKEN must be set as environment variable"
+                "weni_bearer_token is required. Please:\n"
+                "1. Install and use Weni CLI (recommended): 'pip install weni-cli && weni login'\n"
+                "   Get Weni CLI at: https://github.com/weni-ai/weni-cli\n"
+                "2. Or set WENI_BEARER_TOKEN environment variable\n"
+                "3. Or provide 'weni_bearer_token' in your test configuration"
             )
         
         # Generate unique contact URN for this test session
@@ -147,8 +170,84 @@ class WeniTarget(BaseTarget):
             timeout=10
         )
         
-        response.raise_for_status()
-        logger.debug(f"Successfully sent prompt to Weni API. Status: {response.status_code}")
+        try:
+            response.raise_for_status()
+            logger.debug(f"Successfully sent prompt to Weni API. Status: {response.status_code}")
+        except requests.exceptions.HTTPError as e:
+            self._handle_http_error(response, e)
+
+    def _handle_http_error(self, response: requests.Response, error: requests.exceptions.HTTPError) -> None:
+        """Handle HTTP errors with helpful error messages.
+        
+        Args:
+            response: The HTTP response object
+            error: The original HTTPError
+            
+        Raises:
+            ValueError: With a helpful error message based on the status code
+        """
+        status_code = response.status_code
+        
+        if status_code == 401:
+            # Unauthorized - likely invalid token
+            error_msg = (
+                f"Authentication failed (401 Unauthorized). "
+                f"The bearer token is invalid or expired.\n\n"
+                f"To fix this issue:\n"
+                f"1. Install and use Weni CLI (recommended): 'pip install weni-cli && weni login'\n"
+                f"   Get Weni CLI at: https://github.com/weni-ai/weni-cli\n"
+                f"2. Or set a valid token in environment variable: WENI_BEARER_TOKEN=your_token\n"
+                f"3. Or provide 'weni_bearer_token' in your test configuration\n\n"
+                f"Get your token manually from: https://intelligence.weni.ai (User menu > API Token)"
+            )
+            raise ValueError(error_msg) from error
+            
+        elif status_code == 403:
+            # Forbidden - likely no access to project
+            error_msg = (
+                f"Access forbidden (403 Forbidden). "
+                f"You don't have permission to access this project.\n\n"
+                f"To fix this issue:\n"
+                f"1. Verify the project UUID is correct: {self.project_uuid}\n"
+                f"2. Ensure you have access to this project in Weni\n"
+                f"3. Contact your project administrator if needed"
+            )
+            raise ValueError(error_msg) from error
+            
+        elif status_code == 404:
+            # Not found - likely invalid project UUID
+            error_msg = (
+                f"Project not found (404 Not Found). "
+                f"The project UUID '{self.project_uuid}' does not exist or is invalid.\n\n"
+                f"To fix this issue:\n"
+                f"1. Use Weni CLI to select the correct project (recommended): 'weni project use [project-uuid]'\n"
+                f"   Get Weni CLI at: https://github.com/weni-ai/weni-cli\n"
+                f"2. Or set the correct UUID in environment variable: WENI_PROJECT_UUID=your_uuid\n"
+                f"3. Or provide 'weni_project_uuid' in your test configuration\n\n"
+                f"Find your project UUID manually at: https://intelligence.weni.ai (Project Settings > General)"
+            )
+            raise ValueError(error_msg) from error
+            
+        elif status_code >= 500:
+            # Server error
+            error_msg = (
+                f"Weni server error ({status_code}). "
+                f"The Weni API is experiencing issues.\n\n"
+                f"To fix this issue:\n"
+                f"1. Wait a few minutes and try again\n"
+                f"2. Check Weni status page for known issues\n"
+                f"3. Contact Weni support if the problem persists"
+            )
+            raise ValueError(error_msg) from error
+            
+        else:
+            # Other HTTP errors
+            error_msg = (
+                f"HTTP error {status_code}: {response.reason}\n"
+                f"URL: {response.url}\n\n"
+                f"Please check your configuration and try again."
+            )
+            raise ValueError(error_msg) from error
 
     def _wait_for_response(self) -> str:
         """Connect to WebSocket and wait for the agent's final response.
