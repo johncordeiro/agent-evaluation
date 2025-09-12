@@ -208,7 +208,8 @@ class WebSocketConnectionManager:
             
             # Check for WebSocket errors
             if self.ws_error:
-                raise RuntimeError(f"WebSocket error occurred: {self.ws_error}")
+                logger.error(f"WebSocket error occurred: {self.ws_error}")
+                return None  # Let the timeout handling deal with this
             
             time.sleep(0.1)
         
@@ -340,8 +341,24 @@ class WeniTarget(BaseTarget):
             )
             
         except Exception as e:
-            logger.error(f"Error invoking Weni agent: {str(e)}")
-            raise
+            # Handle any unexpected errors gracefully
+            error_message = (
+                f"UNEXPECTED ERROR: {str(e)} - "
+                f"An unexpected error occurred while invoking the Weni agent. "
+                f"Test case marked as failed."
+            )
+            logger.error(f"Error invoking Weni agent: {error_message}")
+
+            # Return error response instead of raising exception
+            return TargetResponse(
+                response=error_message,
+                data={
+                    "contact_urn": self.contact_urn,
+                    "language": self.language,
+                    "session_id": self.contact_urn,
+                    "error": True
+                }
+            )
 
     def _send_prompt(self, prompt: str) -> None:
         """Send a prompt to the Weni API.
@@ -499,16 +516,28 @@ class WeniTarget(BaseTarget):
         
         # Establish initial connection
         if not connection_manager.connect():
-            raise RuntimeError("Failed to establish WebSocket connection after multiple attempts")
+            error_message = (
+                f"CONNECTION ERROR: Failed to establish WebSocket connection after multiple attempts. "
+                f"This could indicate network connectivity issues, invalid credentials, or server problems. "
+                f"Test case marked as failed."
+            )
+            logger.error(error_message)
+            return error_message
         
         try:
             # Wait for response with automatic reconnection and ping/pong
             final_response = connection_manager.wait_for_response()
             
             if final_response is None:
-                raise TimeoutError(
-                    f"No response received from Weni agent within {self.timeout} seconds"
+                # Instead of raising an exception, return an error response
+                # This allows the test to continue with other test cases
+                error_message = (
+                    f"TIMEOUT ERROR: No response received from Weni agent within {self.timeout} seconds. "
+                    f"This could indicate network issues, agent processing delays, or WebSocket connection problems. "
+                    f"Test case marked as failed."
                 )
+                logger.error(error_message)
+                return error_message
             
             return final_response
             
