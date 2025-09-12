@@ -78,17 +78,25 @@ def init(plan_dir: Optional[str]):
     help="The directory where the test result and trace will be generated. If a directory is not provided, the assets will be saved to the current working directory.",
     callback=validate_directory,
 )
+@click.option(
+    "--watch",
+    is_flag=True,
+    type=bool,
+    default=False,
+    help="Enable watch mode to see real-time user and agent interactions during test execution. Tests will run sequentially for better readability.",
+)
 def run(
     filter: Optional[str],
     plan_dir: Optional[str],
     verbose: bool,
     num_threads: Optional[int],
     work_dir: Optional[str],
+    watch: bool,
 ):
     try:
         plan = Plan.load(plan_dir)
         plan.run(
-            verbose=verbose, num_threads=num_threads, work_dir=work_dir, filter=filter
+            verbose=verbose, num_threads=num_threads, work_dir=work_dir, filter=filter, watch=watch
         )
 
     except TestFailureError:

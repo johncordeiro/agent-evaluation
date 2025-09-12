@@ -322,7 +322,6 @@ class WeniTarget(BaseTarget):
             TargetResponse
         """
         try:
-            print(f"Invoking contact URN: {self.contact_urn} with prompt: {prompt}")
             logger.debug(f"Invoking Weni agent with prompt: {prompt}")
             
             # Send the prompt via POST request
