@@ -1,36 +1,35 @@
 ## Getting started
 
-To begin, initialize a test plan.
+To begin, initialize a test plan for your Weni agent.
 
 ```bash
-agenteval init
+weni-agenteval init
 ```
 
 This will create a configuration file named `agenteval.yml` in the current directory.
 
 ```yaml title="agenteval.yml"
 evaluator:
-  model: claude-3
+  model: claude-haiku-3_5-us
+  aws_region: us-east-1
 target:
-  type: bedrock-agent
-  bedrock_agent_id: null
-  bedrock_agent_alias_id: null
+  type: weni
+  timeout: 30
 tests:
-  retrieve_missing_documents:
+  greeting:
     steps:
-    - Ask agent for a list of missing documents for claim-006.
+    - Send a greeting "Olá, bom dia!"
     expected_results:
-    - The agent returns a list of missing documents.
+    - Agent responds with a friendly greeting
 ```
 
-If you are testing an Amazon Bedrock agent, update the following `target` configurations:
+Update the `target` configuration for your Weni agent:
 
-- `bedrock_agent_id`: The unique identifier of the Amazon Bedrock agent.
-- `bedrock_agent_alias_id`: The alias of the Amazon Bedrock agent.
+- `type`: Must be `"weni"` for Weni agents
+- `timeout`: Optional timeout in seconds (defaults to 30)
 
 !!! note
-    Refer to [Targets](targets/index.md) for additional configurations.
-
+    You need both AWS credentials (for the evaluator) and Weni authentication. See [Installation](installation.md) for setup instructions.
 
 Update `tests` with your test cases. Each test must have the following:
 
@@ -40,10 +39,10 @@ Update `tests` with your test cases. Each test must have the following:
 Once you have updated the test plan, you can run your tests:
 
 !!! warning
-    The default [evaluator](evaluators/index.md) is powered by Anthropic's Claude 3 Sonnet model on Amazon Bedrock. The charges you incur from using Amazon Bedrock will be your responsibility. **Please review [this page](evaluators/index.md#evaluator-costs) on evaluator costs before running your tests.**
+    The default [evaluator](evaluators/index.md) is powered by Anthropic's Claude model on Amazon Bedrock. The charges you incur from using Amazon Bedrock will be your responsibility. **Please review [this page](evaluators/index.md#evaluator-costs) on evaluator costs before running your tests.**
 
 ```bash
-agenteval run
+weni-agenteval run
 ```
 
 The results will be printed in your terminal and a Markdown summary will be available in `agenteval_summary.md`.
@@ -54,15 +53,16 @@ flow of evaluation.
 
 ## Writing test cases
 
-It is important to be clear and concise when writing your test cases.
+It is important to be clear and concise when writing your test cases for conversational AI agents.
 
 ```yaml title="agenteval.yml"
 tests:
-  get_open_claims:
+  product_inquiry:
     steps:
-    - Ask the agent which claims are open.
+    - Ask "Quais produtos vocês têm disponíveis?"
     expected_results:
-    - The agent returns a list of open claims.
+    - Agent provides information about available products
+    - Response includes clear product descriptions or categories
 ```
 
 If your test case is complex, consider breaking it down into multiple, smaller `tests`.
@@ -73,13 +73,13 @@ To test multiple user-agent interactions, you can provide multiple `steps` to or
 
 ```yaml title="agenteval.yml"
 tests:
-  get_open_claims_with_details:
+  product_and_delivery:
     steps:
-    - Ask the agent which claims are open.
-    - Ask the agent for details on claim-006.
+    - Ask "Quais produtos vocês têm?"
+    - Ask "Qual é o prazo de entrega?"
     expected_results:
-    - The agent returns a list of open claims.
-    - The agent returns the details on claim-006.
+    - Agent provides product information
+    - Agent maintains context and provides delivery timeframe
 ```
 
 The maximum number of turns allowed for a conversation is configured using the `max_turns` parameter for the test (defaults to `2` when not specified).
@@ -91,12 +91,13 @@ You can test an agent's ability to prompt the user for data when you include it 
 
 ```yaml title="agenteval.yml"
 tests:
-  get_auto_open_claims:
+  purchase_with_postal_code:
     steps:
-    - Ask the agent which claims are open.
-      When the agent asks for the claim type, respond with "Auto".
+    - Ask "Quero comprar arroz".
+      When the agent asks for postal code, respond with "01310-100".
     expected_results:
-    - The agent returns claim-001 and claim-002
+    - Agent confirms the product selection
+    - Agent processes the postal code and confirms delivery availability
 ```
 
 ### Specify the first user message
@@ -105,10 +106,11 @@ By default, the first user message in the test is automatically generated based 
 
 ```yaml title="agenteval.yml"
 tests:
-  get_claims_with_missing_documents:
+  business_hours_inquiry:
     steps:
-    - Ask agent which claims still have missing documents.
-    initial_prompt: Can you let me know which claims still have missing documents?
+    - Ask about business hours and weekend availability.
+    initial_prompt: Qual é o horário de funcionamento da loja?
     expected_results:
-    - The agent returns claim-003 and claim-004
+    - Agent provides clear business hours information
+    - Agent includes both weekday and weekend hours
 ```
