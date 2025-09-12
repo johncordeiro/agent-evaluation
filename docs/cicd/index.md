@@ -17,7 +17,7 @@ The figure below shows what a standard agent CI/CD pipeline looks like:
 
 ## Step-by-step GitHub Actions setup
 
-We have built an example with GitHub Actions, please take a look at the [Github workflow](https://github.com/awslabs/agent-evaluation/actions/workflows/cicd-demo.yml). Here is the step-by-step setup guide:
+We have built an example with GitHub Actions, please take a look at the [Github workflow](https://github.com/weni-ai/agent-evaluation/actions/workflows/cicd-demo.yml). Here is the step-by-step setup guide:
 
 1.	Write a series of test cases following the [agent-evaluation test plan syntax](../user_guide.md). Store test plans in the git repository. For example, a test plan to test a Bedrock agent target is written as follows, with `BEDROCK_AGENT_ALIAS_ID` and `BEDROCK_AGENT_ID` as placeholders:
 
@@ -67,10 +67,10 @@ We have built an example with GitHub Actions, please take a look at the [Github 
             aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
             aws-region: ${{ env.AWS_REGION }}
 
-        - name: Install agent-evaluation
+        - name: Install weni-agenteval
         run: |
-            pip install agent-evaluation
-            agenteval --help
+            pip install weni-agenteval
+            weni-agenteval --help
         - name: Test Bedrock Agent
         id: test-bedrock-agent
         env:
@@ -78,7 +78,7 @@ We have built an example with GitHub Actions, please take a look at the [Github 
             BEDROCK_AGENT_ID: ${{ vars.BEDROCK_AGENT_ID }}
         run: |
             sed -e "s/BEDROCK_AGENT_ALIAS_ID/$BEDROCK_AGENT_ALIAS_ID/g" -e "s/BEDROCK_AGENT_ID/$BEDROCK_AGENT_ID/g" <path-to-the-test-plan-template-file> > agenteval.yml
-            agenteval run
+            weni-agenteval run
         - name: Test Summary
         if: always()
         id: test-summary

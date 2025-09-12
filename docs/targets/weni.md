@@ -4,24 +4,55 @@ Weni is an intelligent agent platform that enables conversational AI experiences
 
 ## Prerequisites
 
+!!! warning "Important"
+    You need both AWS and Weni credentials to run evaluations!
+
 To use the Weni target, you need:
 
-1. **A Weni Project**: An active Weni project with a configured agent
-2. **Authentication Credentials**:
-   - `WENI_PROJECT_UUID`: Your Weni project's unique identifier
-   - `WENI_BEARER_TOKEN`: Your authentication bearer token for the Weni API
+1. **AWS Credentials**: Required for the evaluator (Claude model via Bedrock)
+   - AWS Access Key ID
+   - AWS Secret Access Key
+   - AWS Session Token
 
-These credentials can be provided either:
-- As environment variables (recommended for security)
-- Directly in the configuration file (not recommended for production)
+2. **A Weni Project**: An active project in the [Weni platform](https://weni.ai)
+
+3. **Weni Authentication**: Choose one of the following methods:
+
+   **🚀 Option 1: Weni CLI (Recommended)**
+   
+   Install and authenticate with the Weni CLI:
+   ```bash
+   # Install Weni CLI
+   pip install weni-cli
+   
+   # Authenticate with Weni
+   weni login
+   
+   # Select your project
+   weni project use [your-project-uuid]
+   ```
+   
+   Get the Weni CLI from: https://github.com/weni-ai/weni-cli
+   
+   **📋 Option 2: Environment Variables**
+   
+   Set these environment variables manually:
+   - `WENI_PROJECT_UUID`: Your project's unique identifier
+   - `WENI_BEARER_TOKEN`: Your authentication bearer token
+   
+   **⚙️ Option 3: Configuration File**
+   
+   Provide credentials directly in your test configuration file.
 
 ## Installation
 
-The Weni target requires the `websocket-client` package, which is included in the main requirements:
+The Weni target is included with the main package:
 
 ```bash
-pip install -r requirements.txt
+pip install weni-agenteval
 ```
+
+The required `websocket-client` package is automatically installed as a dependency.
 
 ## Configuration
 
@@ -144,30 +175,56 @@ tests:
 
 ## Running Tests
 
-### Using Environment Variables (Recommended)
+### Using Weni CLI (Recommended)
+
+If you're using the Weni CLI for authentication:
+
+```bash
+weni-agenteval run
+```
+
+The tool automatically looks for `agenteval.yml` in the current directory.
+
+### Using Environment Variables
 
 ```bash
 export WENI_PROJECT_UUID="your-project-uuid"
 export WENI_BEARER_TOKEN="your-bearer-token"
-agenteval run --test-plan weni_test_plan.yml
+weni-agenteval run
 ```
 
-### Using Configuration File
-
-If credentials are provided in the configuration file:
+### Additional CLI Options
 
 ```bash
-agenteval run --test-plan weni_test_plan.yml
+# Run with verbose output
+weni-agenteval run --verbose
+
+# Run specific tests only
+weni-agenteval run --filter "greeting,purchase_outside_postal_code"
+
+# Run from a different directory
+weni-agenteval run --plan-dir /path/to/test/directory
+
+# Initialize a new test plan template
+weni-agenteval init
 ```
 
 ## Troubleshooting
 
 ### Common Issues
 
-**Authentication Errors**
-- Verify your `WENI_BEARER_TOKEN` is valid and not expired
+**AWS Authentication Errors**
+- Verify your AWS environment variables are set correctly (ACCESS_KEY_ID, SECRET_ACCESS_KEY, SESSION_TOKEN)
+- Ensure you have access to Amazon Bedrock in your specified region
+- Check that your AWS credentials have the necessary Bedrock permissions
+- Verify the `aws_region` in your configuration matches your AWS account's region access
+
+**Weni Authentication Errors**
+- **Using Weni CLI (Recommended)**: Run `weni login` to re-authenticate, then `weni project use [project-uuid]` to select your project
+- **Using Environment Variables**: Verify your `WENI_BEARER_TOKEN` is valid and not expired
 - Check that the `WENI_PROJECT_UUID` matches your actual project
 - Ensure the bearer token has the necessary permissions for the project
+- Get Weni CLI at: https://github.com/weni-ai/weni-cli
 
 **Connection Issues**
 - Verify the Weni API endpoints are accessible from your network
