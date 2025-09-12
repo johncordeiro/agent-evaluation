@@ -96,6 +96,12 @@ Run the evaluation:
 weni-agenteval run
 ```
 
+For real-time monitoring of conversations, use watch mode:
+
+```bash
+weni-agenteval run --watch
+```
+
 ---
 
 <div class="grid cards" markdown>

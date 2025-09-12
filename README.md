@@ -170,9 +170,32 @@ weni-agenteval run --filter "greeting,purchase_outside_postal_code"
 # Run from a different directory
 weni-agenteval run --plan-dir /path/to/test/directory
 
+# Run in watch mode for real-time conversation monitoring
+weni-agenteval run --watch
+
+# Combine watch mode with other options
+weni-agenteval run --watch --filter "greeting" --verbose
+
 # Initialize a new test plan template
 weni-agenteval init
 ```
+
+### 🔍 Watch Mode
+
+For real-time monitoring of your tests, use the `--watch` flag to see conversations as they happen:
+
+```bash
+weni-agenteval run --watch
+```
+
+Watch mode provides:
+- **Real-time conversation display**: See user messages and agent responses as they occur
+- **Immediate feedback**: User prompts appear instantly when sent to the agent
+- **Visual test results**: Clear ✅ PASS / ❌ FAIL indicators for each test
+- **Sequential execution**: Tests run one at a time for readable output
+- **Progress tracking**: Shows current test progress and overall completion
+
+Perfect for development, debugging, and demonstrations!
 
 ### Configuration Options for Weni Target
 

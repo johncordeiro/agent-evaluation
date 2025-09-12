@@ -49,6 +49,84 @@ The results will be printed in your terminal and a Markdown summary will be avai
 You will also find traces saved under `agenteval_traces/`. This is useful for understanding the
 flow of evaluation.
 
+## Watch Mode
+
+For real-time monitoring of your tests, you can use the `--watch` mode to see user and agent interactions as they happen:
+
+```bash
+weni-agenteval run --watch
+```
+
+Watch mode provides:
+
+- **Real-time conversation display**: See user messages and agent responses as they occur
+- **Immediate feedback**: User prompts appear instantly when sent to the agent
+- **Visual test results**: Clear ✅ PASS / ❌ FAIL indicators for each test
+- **Sequential execution**: Tests run one at a time for readable output
+- **Progress tracking**: Shows current test progress and overall completion
+
+### Watch Mode Output
+
+When using watch mode, you'll see output like this:
+
+```
+================================================================================
+🔍 WATCH MODE: Running 2 test(s) sequentially
+================================================================================
+
+📋 Test 1/2: greeting
+------------------------------------------------------------
+
+👤 USER: Olá, bom dia!
+🤖 AGENT: Olá! Bom dia! Como posso ajudá-lo hoje?
+
+👤 USER: com oq vc pode me ajudar?
+🤖 AGENT: Posso ajudá-lo com:
+• Informações sobre produtos
+• Rastreamento de pedidos
+• Suporte técnico
+• Consultas gerais
+
+✅ PASSED: greeting
+   Result: All expected results can be observed in the conversation.
+   Reasoning: The agent provided appropriate responses to all user inputs.
+
+================================================================================
+
+📋 Test 2/2: purchase_outside_postal_code
+------------------------------------------------------------
+[... more conversation ...]
+
+🏁 WATCH MODE COMPLETED: 2/2 tests passed
+================================================================================
+```
+
+### Watch Mode Options
+
+You can combine watch mode with other CLI options:
+
+```bash
+# Run specific tests in watch mode
+weni-agenteval run --watch --filter greeting,purchase_test
+
+# Use watch mode with a specific plan directory
+weni-agenteval run --watch --plan-dir /path/to/your/tests
+
+# Run watch mode with verbose logging
+weni-agenteval run --watch --verbose
+```
+
+!!! tip "When to Use Watch Mode"
+    Watch mode is particularly useful for:
+    
+    - **Development**: Debugging test cases and understanding agent behavior
+    - **Demonstrations**: Showing stakeholders how tests interact with agents
+    - **Learning**: Understanding the conversation flow and evaluation process
+    - **Troubleshooting**: Identifying where conversations go wrong
+
+!!! note "Performance Considerations"
+    Watch mode runs tests sequentially (one at a time) to ensure readable output. For faster execution of many tests, use the regular mode without `--watch`.
+
 
 ## Writing test cases
 
