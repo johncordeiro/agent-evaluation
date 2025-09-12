@@ -14,7 +14,6 @@ evaluator:
   aws_region: us-east-1
 target:
   type: weni
-  timeout: 30
 tests:
   greeting:
     steps:

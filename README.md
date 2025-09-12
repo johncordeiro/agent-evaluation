@@ -132,7 +132,6 @@ evaluator:
 
 target:
   type: weni
-  timeout: 30      # Optional: max seconds to wait for response
 
 tests:
   greeting:
@@ -240,9 +239,16 @@ tests:
 
 ## 📚 Documentation
 
-To get started with the original framework features, please visit the full documentation [here](https://awslabs.github.io/agent-evaluation/). 
+**📖 Full Documentation**: Visit our comprehensive documentation at [https://weni-ai.github.io/weni-agent-evaluation/](https://weni-ai.github.io/weni-agent-evaluation/)
 
-For Weni-specific documentation, see the [Weni Target Documentation](docs/targets/weni.md).
+The documentation includes:
+- Complete installation guide with authentication setup
+- Step-by-step user guide with Weni examples
+- Detailed Weni target configuration
+- CLI reference and troubleshooting guides
+- CI/CD integration examples
+
+For the original AWS Labs framework features, you can also visit [https://awslabs.github.io/agent-evaluation/](https://awslabs.github.io/agent-evaluation/).
 
 To contribute, please refer to [CONTRIBUTING.md](./CONTRIBUTING.md)
 

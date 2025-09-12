@@ -59,8 +59,8 @@ The required `websocket-client` package is automatically installed as a dependen
 ```yaml title="agenteval.yml"
 target:
   type: weni
-  language: pt-BR  # Optional, defaults to pt-BR
-  timeout: 30      # Optional, max seconds to wait for response
+  # language: pt-BR  # Optional, defaults to pt-BR
+  # timeout: 30      # Optional, max seconds to wait for response
   # Optionally provide credentials directly (not recommended):
   # weni_project_uuid: your-project-uuid
   # weni_bearer_token: your-bearer-token
@@ -129,8 +129,6 @@ evaluator:
 
 target:
   type: weni
-  language: pt-BR
-  timeout: 30
 
 tests:
   greeting:

@@ -71,7 +71,6 @@ evaluator:
 
 target:
   type: weni
-  timeout: 30      # Optional: max seconds to wait for response
 
 tests:
   greeting:

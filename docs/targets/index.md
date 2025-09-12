@@ -11,7 +11,6 @@ The **Weni target** is the primary focus of this fork, providing native support 
 ```yaml title="agenteval.yml"
 target:
   type: weni
-  timeout: 30      # Optional: max seconds to wait for response
 ```
 
 ### Key Features
