@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "weni-agenteval"
-version = "1.0.5"
+version = "1.0.6"
 description = "A generative AI-powered framework for testing virtual agents."
 authors = [{name = "Weni", email = "john.cordeiro@vtex.com"}]
 license = "Apache-2.0"
