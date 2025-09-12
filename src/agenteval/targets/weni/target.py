@@ -18,6 +18,225 @@ from agenteval.utils import Store
 logger = logging.getLogger(__name__)
 
 
+class WebSocketConnectionManager:
+    """Manages WebSocket connections with ping/pong and reconnection logic."""
+    
+    def __init__(self, endpoint: str, headers: dict, timeout: int):
+        self.endpoint = endpoint
+        self.headers = headers
+        self.timeout = timeout
+        self.ws = None
+        self.ws_thread = None
+        self.final_response = None
+        self.ws_error = None
+        self.connection_lost = False
+        self.ping_interval = 30  # Send ping every 30 seconds
+        self.last_ping_time = 0
+        self.last_pong_time = 0
+        self.max_reconnect_attempts = 3
+        self.reconnect_delay = 2  # seconds
+        self.ping_timeout = 10  # seconds to wait for pong response
+        self._lock = threading.Lock()
+        
+    def connect(self) -> bool:
+        """Establish WebSocket connection with retry logic."""
+        for attempt in range(self.max_reconnect_attempts):
+            try:
+                logger.debug(f"WebSocket connection attempt {attempt + 1}/{self.max_reconnect_attempts}")
+                
+                self.ws = websocket.WebSocketApp(
+                    self.endpoint,
+                    on_open=self._on_open,
+                    on_message=self._on_message,
+                    on_error=self._on_error,
+                    on_close=self._on_close,
+                    on_ping=self._on_ping,
+                    on_pong=self._on_pong,
+                    header=self.headers
+                )
+                
+                # Run WebSocket in a separate thread
+                self.ws_thread = threading.Thread(target=self._run_with_ping)
+                self.ws_thread.daemon = True
+                self.ws_thread.start()
+                
+                # Wait a bit for connection to establish
+                time.sleep(1)
+                
+                if self.ws and not self.connection_lost:
+                    logger.debug("WebSocket connection established successfully")
+                    return True
+                    
+            except Exception as e:
+                logger.warning(f"WebSocket connection attempt {attempt + 1} failed: {e}")
+                
+            if attempt < self.max_reconnect_attempts - 1:
+                logger.debug(f"Retrying connection in {self.reconnect_delay} seconds...")
+                time.sleep(self.reconnect_delay)
+        
+        logger.error("Failed to establish WebSocket connection after all attempts")
+        return False
+    
+    def _run_with_ping(self):
+        """Run WebSocket with automatic ping mechanism."""
+        try:
+            # Start the WebSocket connection
+            self.ws.run_forever()
+        except Exception as e:
+            logger.error(f"WebSocket run_forever failed: {e}")
+            self.ws_error = e
+    
+    def _send_ping(self):
+        """Send ping message to keep connection alive."""
+        if self.ws and not self.connection_lost:
+            try:
+                ping_message = {"type": "ping", "message": {}}
+                self.ws.send(json.dumps(ping_message))
+                self.last_ping_time = time.time()
+                logger.debug("Sent ping message")
+            except Exception as e:
+                logger.warning(f"Failed to send ping: {e}")
+                self.connection_lost = True
+    
+    def _check_connection_health(self):
+        """Check if connection is healthy based on ping/pong timing."""
+        current_time = time.time()
+        
+        # Send ping if interval has passed
+        if current_time - self.last_ping_time > self.ping_interval:
+            self._send_ping()
+        
+        # Check if we haven't received pong in time
+        if (self.last_ping_time > 0 and 
+            self.last_pong_time < self.last_ping_time and 
+            current_time - self.last_ping_time > self.ping_timeout):
+            logger.warning("Ping timeout - connection may be lost")
+            with self._lock:
+                self.connection_lost = True
+    
+    def _on_open(self, ws):
+        """Handle WebSocket connection open."""
+        with self._lock:
+            self.connection_lost = False
+            self.last_ping_time = time.time()
+            self.last_pong_time = time.time()
+        logger.debug("WebSocket connection established")
+    
+    def _on_message(self, ws, message):
+        """Handle incoming WebSocket messages."""
+        try:
+            data = json.loads(message)
+            logger.debug(f"Received WebSocket message: {json.dumps(data, indent=2)[:200]}...")
+            
+            # Handle pong messages
+            if data.get("type") == "pong":
+                with self._lock:
+                    self.last_pong_time = time.time()
+                logger.debug("Received pong response")
+                return
+            
+            # Check for preview message format
+            if data.get("type") == "preview":
+                message_data = data.get("message", {})
+                if message_data.get("type") == "preview":
+                    content = message_data.get("content", {})
+                    if content.get("type") == "broadcast" and "message" in content:
+                        message_content = content["message"]
+
+                        # Handle both string and array formats
+                        if isinstance(message_content, str):
+                            # Simple string format
+                            self.final_response = message_content
+                        elif isinstance(message_content, list) and len(message_content) > 0:
+                            # Array format - concatenate all text messages
+                            text_parts = []
+                            for msg in message_content:
+                                if isinstance(msg, dict) and "msg" in msg:
+                                    msg_obj = msg["msg"]
+                                    if isinstance(msg_obj, dict) and "text" in msg_obj:
+                                        text_parts.append(msg_obj["text"])
+
+                            if text_parts:
+                                self.final_response = "\n".join(text_parts)
+                        
+                        if self.final_response:
+                            logger.debug(f"Received preview broadcast message: {self.final_response[:100]}...")
+
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to decode WebSocket message: {message[:100]}...")
+        except Exception as e:
+            logger.error(f"Error processing WebSocket message: {str(e)}")
+    
+    def _on_error(self, ws, error):
+        """Handle WebSocket errors."""
+        with self._lock:
+            self.ws_error = error
+            self.connection_lost = True
+        logger.error(f"WebSocket error: {error}")
+    
+    def _on_close(self, ws, close_status_code, close_msg):
+        """Handle WebSocket closure."""
+        with self._lock:
+            self.connection_lost = True
+        logger.debug(f"WebSocket closed with code {close_status_code}: {close_msg}")
+    
+    def _on_ping(self, ws, message):
+        """Handle WebSocket ping from server."""
+        logger.debug("Received WebSocket ping from server")
+    
+    def _on_pong(self, ws, message):
+        """Handle WebSocket pong from server."""
+        with self._lock:
+            self.last_pong_time = time.time()
+        logger.debug("Received WebSocket pong from server")
+    
+    def wait_for_response(self) -> Optional[str]:
+        """Wait for response with connection health monitoring and reconnection."""
+        start_time = time.time()
+        
+        while self.final_response is None and (time.time() - start_time) < self.timeout:
+            # Check connection health and send pings
+            self._check_connection_health()
+            
+            # Handle connection loss with reconnection
+            if self.connection_lost and self.final_response is None:
+                logger.warning("Connection lost, attempting to reconnect...")
+                self.close()
+                
+                if not self.connect():
+                    break
+            
+            # Check for WebSocket errors
+            if self.ws_error:
+                raise RuntimeError(f"WebSocket error occurred: {self.ws_error}")
+            
+            time.sleep(0.1)
+        
+        # Close connection when we have a response or timeout
+        if self.final_response is not None:
+            logger.debug("Response received, closing WebSocket connection")
+            self.close()
+        
+        return self.final_response
+    
+    def close(self):
+        """Close WebSocket connection and cleanup."""
+        try:
+            if self.ws:
+                self.ws.close()
+        except:
+            pass
+        
+        # Only join thread if we're not calling from within the WebSocket thread itself
+        if self.ws_thread and self.ws_thread.is_alive():
+            current_thread = threading.current_thread()
+            if current_thread != self.ws_thread:
+                self.ws_thread.join(timeout=1)
+            else:
+                # If called from within the WebSocket thread, just mark it for cleanup
+                logger.debug("Close called from WebSocket thread, skipping thread join")
+
+
 class WeniTarget(BaseTarget):
     """A target encapsulating a Weni agent."""
 
@@ -26,7 +245,7 @@ class WeniTarget(BaseTarget):
         weni_project_uuid: Optional[str] = None,
         weni_bearer_token: Optional[str] = None,
         language: str = "en-US",
-        timeout: int = 240,
+        timeout: int = 480,
         **kwargs
     ):
         """Initialize the target.
@@ -258,72 +477,6 @@ class WeniTarget(BaseTarget):
         Raises:
             TimeoutError: If no response is received within the timeout period.
         """
-        final_response = None
-        start_time = time.time()
-        ws_error = None
-        
-        def on_message(ws, message):
-            """Handle incoming WebSocket messages."""
-            nonlocal final_response
-            try:
-                data = json.loads(message)
-                logger.debug(f"Received WebSocket message: {json.dumps(data, indent=2)[:200]}...")
-                
-                # Check for preview message format
-                if data.get("type") == "preview":
-                    message = data.get("message", {})
-                    if message.get("type") == "preview":
-                        content = message.get("content", {})
-                        if content.get("type") == "broadcast" and "message" in content:
-                            message_content = content["message"]
-
-                            # Handle both string and array formats
-                            if isinstance(message_content, str):
-                                # Simple string format
-                                final_response = message_content
-                            elif isinstance(message_content, list) and len(message_content) > 0:
-                                # Array format - concatenate all text messages
-                                text_parts = []
-                                for msg in message_content:
-                                    if isinstance(msg, dict) and "msg" in msg:
-                                        msg_obj = msg["msg"]
-                                        if isinstance(msg_obj, dict) and "text" in msg_obj:
-                                            text_parts.append(msg_obj["text"])
-
-                                if text_parts:
-                                    final_response = "\n".join(text_parts)
-                            
-                            if final_response:
-                                logger.debug(f"Received preview broadcast message: {final_response[:100]}...")
-                                ws.close()
-
-            except json.JSONDecodeError:
-                logger.warning(f"Failed to decode WebSocket message: {message[:100]}...")
-            except Exception as e:
-                logger.error(f"Error processing WebSocket message: {str(e)}")
-
-        def on_error(ws, error):
-            """Handle WebSocket errors."""
-            nonlocal ws_error
-            ws_error = error
-            logger.error(f"WebSocket error: {error}")
-
-        def on_close(ws, close_status_code, close_msg):
-            """Handle WebSocket closure."""
-            logger.debug(f"WebSocket closed with code {close_status_code}: {close_msg}")
-
-        def on_open(ws):
-            """Handle WebSocket connection open."""
-            logger.debug("WebSocket connection established")
-
-        def on_ping(ws, message):
-            """Handle WebSocket ping."""
-            logger.debug("Received WebSocket ping")
-
-        def on_pong(ws, message):
-            """Handle WebSocket pong."""
-            logger.debug("Received WebSocket pong")
-
         # Configure WebSocket headers
         headers = {
             "Origin": "https://intelligence-next.weni.ai",
@@ -337,41 +490,28 @@ class WeniTarget(BaseTarget):
         
         logger.debug(f"Connecting to WebSocket: {self.ws_endpoint[:50]}...")
         
-        # Create WebSocket connection
-        ws = websocket.WebSocketApp(
-            self.ws_endpoint,
-            on_open=on_open,
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close,
-            on_ping=on_ping,
-            on_pong=on_pong,
-            header=headers
+        # Create connection manager with ping/pong and reconnection support
+        connection_manager = WebSocketConnectionManager(
+            endpoint=self.ws_endpoint,
+            headers=headers,
+            timeout=self.timeout
         )
         
-        # Run WebSocket in a separate thread
-        ws_thread = threading.Thread(target=ws.run_forever)
-        ws_thread.daemon = True
-        ws_thread.start()
+        # Establish initial connection
+        if not connection_manager.connect():
+            raise RuntimeError("Failed to establish WebSocket connection after multiple attempts")
         
-        # Wait for response with timeout
-        while final_response is None and (time.time() - start_time) < self.timeout:
-            if ws_error:
-                raise RuntimeError(f"WebSocket error occurred: {ws_error}")
-            time.sleep(0.1)
-        
-        # Ensure WebSocket is closed
         try:
-            ws.close()
-        except:
-            pass
-        
-        # Wait for thread to finish
-        ws_thread.join(timeout=1)
-        
-        if final_response is None:
-            raise TimeoutError(
-                f"No response received from Weni agent within {self.timeout} seconds"
-            )
-        
-        return final_response
+            # Wait for response with automatic reconnection and ping/pong
+            final_response = connection_manager.wait_for_response()
+            
+            if final_response is None:
+                raise TimeoutError(
+                    f"No response received from Weni agent within {self.timeout} seconds"
+                )
+            
+            return final_response
+            
+        finally:
+            # Ensure WebSocket is properly closed
+            connection_manager.close()
